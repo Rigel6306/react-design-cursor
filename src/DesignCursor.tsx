@@ -36,8 +36,8 @@ type Ctl = { cancelled: boolean };
 const CANCEL = Symbol("cancel");
 
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
-const easeInOut = (t: number) =>
-  t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+/** smootherstep: zero velocity AND acceleration at both ends, so motion feels hand-guided */
+const easeInOut = (t: number) => t * t * t * (t * (t * 6 - 15) + 10);
 const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
 
 const sleep = (ms: number, ctl: Ctl) =>
@@ -191,7 +191,14 @@ export const DesignCursor = ({
       });
       hidden.clear();
     };
-    const clearOverlay = () => overlay.replaceChildren();
+
+    /* number of dust particles currently alive (capped for performance) */
+    let live = 0;
+    const MAX_LIVE = 420;
+    const clearOverlay = () => {
+      overlay.replaceChildren();
+      live = 0;
+    };
 
     /* ---------- palette ---------- */
 
@@ -210,55 +217,150 @@ export const DesignCursor = ({
       .join(", ")})`;
 
     const EASE_OUT_EXPO = "cubic-bezier(.22,1,.36,1)";
-    const EASE_SPRING = "cubic-bezier(.34,1.56,.64,1)";
+    const EASE_SOFT = "cubic-bezier(.4,0,.2,1)";
 
-    /* ---------- frosted pill with a gradient edge ---------- */
+    /* ---------- minimal label ---------- */
 
     const pill = (text: string, o: { dot?: boolean; mono?: boolean } = {}) => {
       const el = mk("span", {
         position: "absolute",
-        padding: "1px",
-        borderRadius: "999px",
-        background: grad(120),
-        boxShadow: `0 8px 22px ${mixc(P0, 38)}`,
+        padding: o.mono ? "3px 6px" : "3px 7px",
+        borderRadius: "4px",
+        background: "rgba(16,16,28,.92)",
+        border: "1px solid rgba(255,255,255,.12)",
+        color: "#fff",
+        font: o.mono
+          ? "500 10.5px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace"
+          : "600 11px/1.2 system-ui, -apple-system, Segoe UI, sans-serif",
+        letterSpacing: ".01em",
         whiteSpace: "nowrap",
         transition: "opacity .25s",
         pointerEvents: "none",
       });
-      const inner = mk("span", {
-        display: "inline-flex",
-        alignItems: "center",
-        gap: "6px",
-        padding: o.dot ? "5px 10px 5px 8px" : "5px 9px",
-        borderRadius: "999px",
-        background: "rgba(14,14,26,.84)",
-        color: "#fff",
-        font: o.mono
-          ? "500 10.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace"
-          : "600 11.5px/1 system-ui, -apple-system, Segoe UI, sans-serif",
-        letterSpacing: ".02em",
-      });
-      inner.style.setProperty("backdrop-filter", "blur(10px)");
-      inner.style.setProperty("-webkit-backdrop-filter", "blur(10px)");
-      if (o.dot) {
-        inner.appendChild(
-          mk("span", {
-            width: "7px",
-            height: "7px",
-            borderRadius: "50%",
-            background: conicFull,
-            boxShadow: `0 0 8px ${mixc(P1, 80)}`,
-          })
-        );
-      }
-      const t = mk("span");
-      t.textContent = text;
-      inner.appendChild(t);
-      el.appendChild(inner);
-      return { el, text: t };
+      el.textContent = text;
+      return { el, text: el };
     };
 
-    /* ---------- effects ---------- */
+    /* ---------- dust ----------
+       One particle: a soft-edged speck (or, rarely, a tiny 4-point glint) that
+       fades in, drifts outward with drag, sways, slowly settles under a touch of
+       gravity, twinkles, and fades away. */
+
+    interface MoteOpts {
+      dx: number; // total outward drift (px)
+      dy: number;
+      g: number; // slow fall (px)
+      dur: number; // ms
+      delay?: number;
+      size: number; // px (core size)
+      color: string;
+      alpha: number;
+      glint?: boolean;
+      wobble?: number; // sway amplitude (px)
+    }
+
+    const mote = (x: number, y: number, o: MoteOpts) => {
+      if (live >= MAX_LIVE) return;
+      live++;
+      const s = o.size;
+      let el: HTMLElement;
+      if (o.glint) {
+        el = mk("div", {
+          position: "absolute",
+          left: `${x - s / 2}px`,
+          top: `${y - s / 2}px`,
+          width: `${s}px`,
+          height: `${s}px`,
+          background: `linear-gradient(135deg, #fff 0%, ${o.color} 100%)`,
+          clipPath: "polygon(50% 0%, 58% 42%, 100% 50%, 58% 58%, 50% 100%, 42% 58%, 0% 50%, 42% 42%)",
+          opacity: "0",
+          pointerEvents: "none",
+          zIndex: "2",
+          willChange: "transform, opacity",
+        });
+      } else {
+        /* soft halo box around a tiny bright core; slightly squashed so no two look alike */
+        const w = s * 2.6;
+        const h = w * (0.55 + Math.random() * 0.45);
+        el = mk("div", {
+          position: "absolute",
+          left: `${x - w / 2}px`,
+          top: `${y - h / 2}px`,
+          width: `${w}px`,
+          height: `${h}px`,
+          borderRadius: "50%",
+          background: `radial-gradient(circle, rgba(255,255,255,.95) 0%, ${o.color} 30%, ${mixc(o.color, 0)} 68%)`,
+          opacity: "0",
+          pointerEvents: "none",
+          zIndex: "2",
+          willChange: "transform, opacity",
+        });
+      }
+      overlay.appendChild(el);
+
+      const steps = 12;
+      const phase = Math.random() * Math.PI * 2;
+      const freq = 1.5 + Math.random() * 2;
+      const wob = o.wobble ?? 3;
+      const len = Math.hypot(o.dx, o.dy) || 1;
+      const nx = -o.dy / len;
+      const ny = o.dx / len;
+      const rot0 = Math.random() * 90;
+      const spinBy = (Math.random() - 0.5) * 140;
+
+      const frames = Array.from({ length: steps + 1 }, (_, k) => {
+        const t = k / steps;
+        const e = 1 - Math.pow(1 - t, 2.2); // drag: quick start, long glide
+        const sway = Math.sin(t * Math.PI * freq + phase) * wob * t;
+        const px = o.dx * e + nx * sway;
+        const py = o.dy * e + ny * sway + o.g * t * t;
+        const fadeIn = Math.min(1, t / 0.12);
+        const fadeOut = t > 0.55 ? 1 - (t - 0.55) / 0.45 : 1;
+        const twinkle = o.glint ? 1 : 0.72 + 0.28 * Math.sin(t * Math.PI * (4 + freq * 2) + phase);
+        const sc = o.glint ? (t < 0.3 ? t / 0.3 : 1 - (t - 0.3) / 0.7) : 1 - t * 0.45;
+        return {
+          transform: `translate(${px}px, ${py}px) rotate(${rot0 + spinBy * t}deg) scale(${Math.max(0.001, sc)})`,
+          opacity: o.alpha * fadeIn * fadeOut * twinkle,
+          offset: t,
+        };
+      });
+
+      const a = el.animate(frames, {
+        duration: o.dur,
+        delay: o.delay ?? 0,
+        easing: "linear",
+        fill: "both",
+      });
+      a.onfinish = () => {
+        el.remove();
+        live = Math.max(0, live - 1);
+      };
+    };
+
+    /* a few fine specks (and now and then a glint) shed from the cursor tip */
+    let dustIdx = 0;
+    const emitDust = (x: number, y: number) => {
+      const count = Math.random() < 0.25 ? 3 : 2;
+      for (let i = 0; i < count; i++) {
+        const ang = Math.random() * Math.PI * 2;
+        const dist = 8 + Math.random() * 24;
+        const glint = Math.random() < 0.07;
+        const c = Math.random() < 0.35 ? "#fff" : palette[dustIdx++ % n];
+        mote(x + (Math.random() - 0.5) * 6, y + (Math.random() - 0.5) * 6, {
+          dx: Math.cos(ang) * dist * 0.8,
+          dy: Math.sin(ang) * dist * 0.8,
+          g: 6 + Math.random() * 16,
+          dur: (900 + Math.random() * 900) / speed,
+          size: glint ? 6 + Math.random() * 3 : 0.9 + Math.pow(Math.random(), 2.2) * 2.2,
+          color: c,
+          alpha: glint ? 0.9 : 0.45 + Math.random() * 0.4,
+          glint,
+          wobble: 2 + Math.random() * 4,
+        });
+      }
+    };
+
+    /* ---------- click burst: one soft ring + a puff of fine dust ---------- */
 
     let burstIdx = 0;
     const burst = (x: number, y: number) => {
@@ -270,107 +372,77 @@ export const DesignCursor = ({
         width: "24px",
         height: "24px",
         borderRadius: "50%",
-        border: `2px solid ${c0}`,
-        boxShadow: `0 0 16px ${mixc(c0, 65)}, inset 0 0 10px ${mixc(c0, 35)}`,
+        border: `1.5px solid ${c0}`,
+        boxShadow: `0 0 14px ${mixc(c0, 45)}`,
         pointerEvents: "none",
         zIndex: "2",
       });
       overlay.appendChild(ring);
       const ra = ring.animate(
         [
-          { transform: "scale(.25)", opacity: 0.95 },
-          { transform: "scale(2.4)", opacity: 0 },
+          { transform: "scale(.3)", opacity: 0.8 },
+          { transform: "scale(2.3)", opacity: 0 },
         ],
-        { duration: 560 / speed, easing: "ease-out" }
+        { duration: 760 / speed, easing: EASE_OUT_EXPO }
       );
       ra.onfinish = () => ring.remove();
 
-      const count = 7;
-      const offset = Math.random() * Math.PI;
-      for (let i = 0; i < count; i++) {
-        const c = palette[(i + burstIdx) % n];
-        const ang = offset + (i * Math.PI * 2) / count;
-        const d = 20 + Math.random() * 18;
-        const s = 3 + Math.random() * 3;
-        const dot = mk("div", {
-          position: "absolute",
-          left: `${x - s / 2}px`,
-          top: `${y - s / 2}px`,
-          width: `${s}px`,
-          height: `${s}px`,
-          borderRadius: "50%",
-          background: c,
-          boxShadow: `0 0 8px 1px ${mixc(c, 80)}`,
-          pointerEvents: "none",
-          zIndex: "2",
+      for (let i = 0; i < 14; i++) {
+        const ang = Math.random() * Math.PI * 2;
+        const dist = 14 + Math.random() * 30;
+        mote(x, y, {
+          dx: Math.cos(ang) * dist,
+          dy: Math.sin(ang) * dist,
+          g: 8 + Math.random() * 14,
+          dur: (800 + Math.random() * 700) / speed,
+          delay: (Math.random() * 60) / speed,
+          size: 0.9 + Math.pow(Math.random(), 2) * 2.2,
+          color: Math.random() < 0.3 ? "#fff" : palette[(i + burstIdx) % n],
+          alpha: 0.5 + Math.random() * 0.4,
+          wobble: 2 + Math.random() * 4,
         });
-        overlay.appendChild(dot);
-        const a = dot.animate(
-          [
-            { transform: "translate(0,0) scale(1)", opacity: 1 },
-            { transform: `translate(${Math.cos(ang) * d}px, ${Math.sin(ang) * d}px) scale(0)`, opacity: 0 },
-          ],
-          { duration: (480 + Math.random() * 220) / speed, easing: "cubic-bezier(.2,.7,.2,1)" }
-        );
-        a.onfinish = () => dot.remove();
+      }
+      for (let i = 0; i < 2; i++) {
+        const ang = Math.random() * Math.PI * 2;
+        const dist = 12 + Math.random() * 22;
+        mote(x, y, {
+          dx: Math.cos(ang) * dist,
+          dy: Math.sin(ang) * dist,
+          g: 6,
+          dur: (900 + Math.random() * 500) / speed,
+          size: 6 + Math.random() * 4,
+          color: palette[(i + burstIdx) % n],
+          alpha: 1,
+          glint: true,
+        });
       }
     };
 
-    /* soft multicolour stardust left behind the cursor */
-    let dustIdx = 0;
-    const stardust = (x: number, y: number) => {
-      const c = palette[dustIdx++ % n];
-      const s = 4 + Math.random() * 3;
-      const d = mk("div", {
-        position: "absolute",
-        left: `${x - s / 2}px`,
-        top: `${y - s / 2}px`,
-        width: `${s}px`,
-        height: `${s}px`,
-        borderRadius: "50%",
-        background: c,
-        boxShadow: `0 0 8px 1px ${mixc(c, 80)}`,
-        pointerEvents: "none",
-        zIndex: "2",
-      });
-      overlay.appendChild(d);
-      const dx = (Math.random() - 0.5) * 16;
-      const dy = 4 + Math.random() * 10;
-      const a = d.animate(
-        [
-          { transform: "translate(0,0) scale(1)", opacity: 0.95 },
-          { transform: `translate(${dx}px, ${dy}px) scale(0)`, opacity: 0 },
-        ],
-        { duration: 650 + Math.random() * 350, easing: "ease-out" }
-      );
-      a.onfinish = () => d.remove();
-    };
-
-    /* a diagonal sheen that glides across the freshly revealed element */
-    const shine = (x: number, y: number, w: number, h: number, radius: string, ms: number) => {
-      const wrap = mk("div", {
+    /* a single soft outline that breathes out from the element as it appears */
+    const breathe = (x: number, y: number, w: number, h: number, radius: string, ms: number) => {
+      const ring = mk("div", {
         position: "absolute",
         left: `${x}px`,
         top: `${y}px`,
         width: `${w}px`,
         height: `${h}px`,
-        overflow: "hidden",
+        boxSizing: "border-box",
         borderRadius: radius,
+        border: `1px solid ${mixc(P0, 70)}`,
+        boxShadow: `0 0 16px ${mixc(P1, 28)}`,
         pointerEvents: "none",
         zIndex: "2",
       });
-      const streak = mk("div", {
-        position: "absolute",
-        inset: "0",
-        background: `linear-gradient(105deg, transparent 34%, rgba(255,255,255,.5) 47%, ${mixc(P1, 45)} 52%, transparent 66%)`,
-      });
-      wrap.appendChild(streak);
-      overlay.appendChild(wrap);
-      const a = streak.animate(
-        [{ transform: "translateX(-105%)" }, { transform: "translateX(105%)" }],
-        { duration: ms * 1.15, easing: "ease-in-out" }
+      overlay.appendChild(ring);
+      const a = ring.animate(
+        [
+          { transform: "scale(1)", opacity: 0 },
+          { opacity: 0.8, offset: 0.25 },
+          { transform: `scale(${1 + clamp(14 / Math.max(w, h), 0.012, 0.06)})`, opacity: 0 },
+        ],
+        { duration: ms * 1.4, easing: EASE_OUT_EXPO }
       );
-      a.onfinish = () => wrap.remove();
+      a.onfinish = () => ring.remove();
     };
 
     /* ---------- cursor: aurora orb, gradient pointer, glass name tag ---------- */
@@ -410,7 +482,6 @@ export const DesignCursor = ({
       const arrow = mk("div", {
         position: "relative",
         transformOrigin: "4px 2px",
-        transition: "transform .12s linear",
       });
       const gid = `dcg${Math.random().toString(36).slice(2, 8)}`;
       const stops = palette
@@ -426,27 +497,33 @@ export const DesignCursor = ({
 
       const pos = { x: 0, y: 0 };
       let last: { x: number; y: number } | null = null;
+      let tilt = 0;
 
       const set = (x: number, y: number) => {
         const vx = x - pos.x;
         pos.x = x;
         pos.y = y;
         el.style.transform = `translate3d(${x - 4}px, ${y - 2}px, 0)`;
-        arrow.style.transform = `rotate(${clamp(vx * 0.7, -14, 14)}deg)`;
+        /* low-pass the lean so it eases in and out instead of twitching */
+        tilt += (clamp(vx * 0.7, -14, 14) - tilt) * 0.3;
+        arrow.style.transform = `rotate(${tilt}deg)`;
         if (!last) {
           last = { x, y };
-        } else if (Math.hypot(x - last.x, y - last.y) > 11 && y < H) {
-          stardust(x, y);
+        } else if (y < H && Math.hypot(x - last.x, y - last.y) > 8) {
+          emitDust(x, y);
           last = { x, y };
         }
       };
 
-      /* a little "click" squish */
+      /* a soft "click": press in, settle with a tiny rebound */
       const click = () => {
-        arrow.animate({ scale: ["1", "0.8", "1"] }, { duration: 240 / speed, easing: "ease-out" });
+        arrow.animate(
+          { scale: ["1", "0.84", "1.05", "1"] },
+          { duration: 340 / speed, easing: "ease-in-out" }
+        );
       };
 
-      /* curved, human-ish movement */
+      /* curved, human-ish movement with a smootherstep velocity profile */
       const moveTo = (x: number, y: number, ms: number, ctl: Ctl) => {
         const sx = pos.x;
         const sy = pos.y;
@@ -468,7 +545,7 @@ export const DesignCursor = ({
       return { el, set, moveTo, click, pos };
     };
 
-    /* ---------- selection box: orbiting light, aurora glow, round handles ---------- */
+    /* ---------- selection box: orbiting light, aurora glow ---------- */
 
     const makeBox = (x: number, y: number, name: string, chrome: boolean, radius: string) => {
       const el = mk("div", {
@@ -545,39 +622,33 @@ export const DesignCursor = ({
         nameChip.el.style.top = "8px";
       } else {
         nameChip.el.style.left = "0px";
-        nameChip.el.style.top = "-32px";
+        nameChip.el.style.top = "-26px";
       }
 
       const dim = pill("0 × 0", { mono: true });
       dim.el.style.left = "50%";
       dim.el.style.top = "100%";
-      dim.el.style.transform = "translate(-50%, 12px)";
-
-      const handles = [0, 1].flatMap((cx) =>
-        [0, 1].map((cy) => {
-          const c = palette[(cx * 2 + cy) % n];
-          return mk("span", {
-            position: "absolute",
-            left: `${cx * 100}%`,
-            top: `${cy * 100}%`,
-            width: "10px",
-            height: "10px",
-            borderRadius: "50%",
-            background: "#fff",
-            boxShadow: `0 0 0 2px ${c}, 0 4px 10px rgba(10,10,30,.28)`,
-            transform: "translate(-50%, -50%) scale(0)",
-            opacity: "0",
-            transition: "opacity .25s",
-          });
-        })
-      );
+      dim.el.style.transform = "translate(-50%, 8px)";
 
       el.append(fill, ring);
       if (chrome) {
         el.prepend(glow);
-        el.append(...handles, nameChip.el, dim.el);
+        el.append(nameChip.el, dim.el);
       }
       overlay.appendChild(el);
+
+      /* let the orbiting comet slow to a stop instead of freezing mid-frame */
+      const decelerate = () => {
+        const t0 = performance.now();
+        const D = 750;
+        const step = (now: number) => {
+          const t = Math.min(1, (now - t0) / D);
+          spin.playbackRate = Math.max(0.0001, 1 - easeOut(t));
+          if (t < 1) requestAnimationFrame(step);
+          else spin.pause();
+        };
+        requestAnimationFrame(step);
+      };
 
       return {
         el,
@@ -595,17 +666,6 @@ export const DesignCursor = ({
           if (!chrome) return;
           nameChip.el.style.opacity = "1";
           glow.style.opacity = "0.5";
-          handles.forEach((h, i) => {
-            h.style.opacity = "1";
-            h.style.transform = "translate(-50%, -50%) scale(1)";
-            h.animate(
-              [
-                { transform: "translate(-50%, -50%) scale(0)" },
-                { transform: "translate(-50%, -50%) scale(1)" },
-              ],
-              { duration: 380 / speed, delay: (i * 45) / speed, easing: EASE_SPRING, fill: "backwards" }
-            );
-          });
           el.animate(
             [
               { boxShadow: `0 0 0 0 ${mixc(P1, 50)}` },
@@ -614,26 +674,38 @@ export const DesignCursor = ({
             { duration: 560 / speed, easing: "ease-out" }
           );
         },
+        /* everything eases out together: the comet coasts to a stop while the
+           glow, fill and chips dissolve on one soft curve */
         settle() {
-          spin.cancel();
           if (!chrome) {
+            spin.cancel();
             el.style.opacity = "0";
             return;
           }
+          decelerate();
+          spinner.style.transition = `opacity .9s ${EASE_SOFT}`;
           spinner.style.opacity = "0";
+          glow.style.transition = `opacity 1s ${EASE_SOFT}`;
           glow.style.opacity = "0";
+          fill.style.transition = `opacity .8s ${EASE_SOFT}`;
           fill.style.opacity = "0";
-          ring.style.opacity = "0.6";
+          ring.style.transition = `opacity .9s ${EASE_SOFT}`;
+          ring.style.opacity = "0.5";
+          nameChip.el.style.transition = `opacity .5s ${EASE_SOFT}`;
           nameChip.el.style.opacity = "0";
+          dim.el.style.transition = `opacity .5s ${EASE_SOFT}`;
           dim.el.style.opacity = "0";
-          handles.forEach((h) => (h.style.opacity = "0"));
           el.animate(
             [
-              { boxShadow: `0 0 0 0 ${mixc(P1, 45)}` },
-              { boxShadow: `0 0 0 10px ${mixc(P1, 0)}` },
+              { boxShadow: `0 0 0 0 ${mixc(P1, 38)}` },
+              { boxShadow: `0 0 0 18px ${mixc(P1, 0)}` },
             ],
-            { duration: 480 / speed, easing: "ease-out" }
+            { duration: 900 / speed, easing: EASE_OUT_EXPO }
           );
+        },
+        fade() {
+          el.style.transition = `opacity 1s ${EASE_SOFT}`;
+          el.style.opacity = "0";
         },
       };
     };
@@ -678,24 +750,25 @@ export const DesignCursor = ({
           el.getAttribute("data-dc-name") ?? (el === content ? "frame" : el.tagName.toLowerCase());
         const radius = radiusOf(el);
 
-        /* bloom from the centre: the element opens like an iris, then a sheen glides over it */
+        /* bloom from the centre: the element opens like an iris and sharpens while a soft outline breathes out */
         const reveal = () => {
           el.style.visibility = hidden.get(el) ?? "";
           hidden.delete(el);
           if (kind === "frame") return;
-          const dur = (kind === "quick" ? 280 : 680) / speed;
+          const dur = (kind === "quick" ? 300 : 820) / speed;
           el.animate(
             [
               {
                 clipPath: `inset(50% 50% 50% 50% round ${radius})`,
-                filter: "blur(10px) saturate(1.6)",
+                filter: "blur(12px) saturate(1.4)",
                 opacity: 0,
               },
+              { opacity: 1, filter: "blur(3px) saturate(1.15)", offset: 0.45 },
               { clipPath: "inset(-40px)", filter: "blur(0px) saturate(1)", opacity: 1 },
             ],
             { duration: dur, easing: EASE_OUT_EXPO }
           );
-          if (kind !== "quick") shine(x, y, w, h, radius, dur);
+          if (kind !== "quick") breathe(x, y, w, h, radius, dur);
         };
 
         if (w < 4 || h < 4) {
@@ -704,7 +777,12 @@ export const DesignCursor = ({
         }
 
         const travel = Math.hypot(x - cursor.pos.x, y - cursor.pos.y);
-        await cursor.moveTo(x, y, clamp(P.travel[0] + travel * 0.4, P.travel[0], P.travel[1]) / speed, ctl);
+        await cursor.moveTo(
+          x,
+          y,
+          (clamp(P.travel[0] + travel * 0.4, P.travel[0], P.travel[1]) * 1.1) / speed,
+          ctl
+        );
 
         if (P.chrome) {
           burst(x, y);
@@ -733,10 +811,11 @@ export const DesignCursor = ({
       }
 
       await sleep(300 / speed, ctl);
-      boxes.forEach((b) => (b.el.style.opacity = "0"));
+      boxes.forEach((b) => b.fade());
+
       await cursor.moveTo(W * 0.85, H + 40, 550 / speed, ctl);
       cursor.el.style.opacity = "0";
-      await sleep(400, ctl);
+      await sleep(1800 / speed, ctl);
       clearOverlay();
       restoreAll();
     };
