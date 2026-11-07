@@ -1,0 +1,48 @@
+{
+  "name": "react-design-cursor",
+  "version": "1.0.1",
+  "license": "MIT",
+  "description": "A react animation wrapper that brings UI sections to life by simulating a designer biuilding and outlining the components in real-time",
+  "author": "charitha/rigel6306",
+  "type": "module",
+  "module": "./dist/react-design-cursor.js",
+  "main": "./dist/react-design-cursor.umd.cjs",
+  "keywords": [
+    "react",
+    "cursor",
+    "animation",
+    "wireframe",
+    "ui"
+  ],
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/react-design-cursor.js",
+      "require": "./dist/react-design-cursor.umd.cjs",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "prepack": "npm run build",
+    "build": "vite build"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.3.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "typescript": "^6.0.3",
+    "vite": "^8.3.6",
+    "vite-plugin-dts": "^5.1.2"
+  },
+  "dependencies": {
+    "react-design-cursor": "^0.0.0-stage"
+  }
+}
