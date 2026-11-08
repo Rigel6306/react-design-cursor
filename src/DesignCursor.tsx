@@ -1,116 +1,17 @@
 import React, { useEffect, useRef } from "react";
+import { clamp,easeInOut,easeOut,sleep,tween,collect } from "./utils/designCursorUtils";
 
-export interface DesignCursorProps {
-  children: React.ReactNode;
-  className?: string;
-  style?: React.CSSProperties;
-  /** Primary colour (any CSS colour). Used as the first stop of the default aurora palette. */
-  color?: string;
-  /** Optional full palette (2+ colours, any CSS colours). Overrides the default aurora palette. */
-  colors?: string[];
-  /** Name tag shown next to the cursor. */
-  label?: string;
-  /** 1 = normal, 2 = twice as fast. */
-  speed?: number;
-  /** Replay the animation forever while in view. Default false. */
-  loop?: boolean;
-  replay?: boolean;
-  /** Pause between loops (ms). */
-  loopDelay?: number;
-  /** Delay before the first run (ms). */
-  startDelay?: number;
-  /** How deep into the wrapped tree to draw boxes (1 = direct children only). */
-  maxDepth?: number;
-  /** Safety cap on the number of boxes drawn per run (default 14, or 80 with `selector`). */
-  maxSteps?: number;
-  selector?: string;
-  /** Elements matching this are drawn very fast with no tags (grids of icons). */
-  quickSelector?: string;
-  /** "inView" starts when scrolled into view (and pauses when it leaves). */
-  trigger?: "mount" | "inView";
-}
+import { PROFILE,CANCEL } from "./const/constents";
 
-type El = HTMLElement | SVGElement;
-type Ctl = { cancelled: boolean };
+import { El,Ctl,DesignCursorProps,Kind } from "./types/designTypes";
 
-const CANCEL = Symbol("cancel");
 
-const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
-/** smootherstep: zero velocity AND acceleration at both ends, so motion feels hand-guided */
-const easeInOut = (t: number) => t * t * t * (t * (t * 6 - 15) + 10);
-const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
 
-const sleep = (ms: number, ctl: Ctl) =>
-  new Promise<void>((resolve, reject) => {
-    setTimeout(() => (ctl.cancelled ? reject(CANCEL) : resolve()), ms);
-  });
 
-const tween = (ms: number, ctl: Ctl, fn: (t: number) => void) =>
-  new Promise<void>((resolve, reject) => {
-    const t0 = performance.now();
-    const frame = (now: number) => {
-      if (ctl.cancelled) {
-        reject(CANCEL);
-        return;
-      }
-      const t = Math.min(1, (now - t0) / Math.max(1, ms));
-      fn(t);
-      if (t < 1) requestAnimationFrame(frame);
-      else resolve();
-    };
-    requestAnimationFrame(frame);
-  });
 
-/** Collect the elements we will "design", in document order. */
-function collect(
-  root: HTMLElement,
-  maxDepth: number,
-  maxSteps: number,
-  selector?: string
-): El[] {
-  const out: El[] = [root];
 
-  if (selector) {
-    root.querySelectorAll<El>(selector).forEach((el) => {
-      if (el === root) return;
-      const r = el.getBoundingClientRect();
-      if (r.width < 6 || r.height < 6) return;
-      out.push(el);
-    });
-    return out.slice(0, maxSteps);
-  }
-
-  const SKIP = new Set(["script", "style", "br", "wbr", "template", "noscript"]);
-
-  const walk = (parent: Element, depth: number) => {
-    if (depth > maxDepth) return;
-    for (const child of Array.from(parent.children)) {
-      if (!(child instanceof HTMLElement || child instanceof SVGSVGElement)) continue;
-      if (SKIP.has(child.tagName.toLowerCase())) continue;
-      if (getComputedStyle(child).display === "none") continue;
-      const r = child.getBoundingClientRect();
-      if (r.width < 6 || r.height < 6) continue;
-      out.push(child);
-      if (!(child instanceof SVGSVGElement)) walk(child, depth + 1);
-    }
-  };
-
-  walk(root, 1);
-  return out.slice(0, maxSteps);
-}
-
-type Kind = "frame" | "card" | "item" | "quick";
 
 /** Timing per kind, in ms: [min, max] for cursor travel and for the drag. */
-const PROFILE: Record<
-  Kind,
-  { travel: [number, number]; draw: [number, number]; hold: number; settle: number; chrome: boolean }
-> = {
-  frame: { travel: [220, 420], draw: [480, 720], hold: 80, settle: 100, chrome: true },
-  card: { travel: [190, 360], draw: [250, 420], hold: 40, settle: 60, chrome: true },
-  item: { travel: [95, 200], draw: [120, 220], hold: 0, settle: 40, chrome: true },
-  quick: { travel: [40, 70], draw: [50, 80], hold: 0, settle: 20, chrome: false },
-};
 
 /** Element rect clipped by any overflow-hidden ancestor (so a globe that
  *  spills out of its card is drawn only where it is actually visible). */
