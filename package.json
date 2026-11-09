@@ -23,8 +23,8 @@
     }
   },
   "files": [
-    "dist",
-    "docs"
+    "dist"
+   
   ],
   "scripts": {
     "prepack": "npm run build",
