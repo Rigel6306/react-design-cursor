@@ -7,7 +7,7 @@ import type {
   PerfOptions,
   TagOptions,
   Variant,
-} from "./types";
+} from "../types/types";
 
 /* ---------- colour ---------- */
 
