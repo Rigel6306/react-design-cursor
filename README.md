@@ -11,12 +11,12 @@ An interactive React component that simulates a designer outlining your UI in re
 
 <table>
   <tr>
-    <td align="center"><b>Gradient</b> (default)<br/><img src="./docs/gradient.gif" width="400" alt="Gradient variant demo" /></td>
-    <td align="center"><b>Minimal</b><br/><img src="./docs/minimal.gif" width="400" alt="Minimal variant demo" /></td>
+    <td align="center"><b>Gradient</b> (default)<br/><img src="https://raw.githubusercontent.com/Rigel6306/react-design-cursor/main/docs/gradient.gif" width="400" alt="Gradient variant demo" /></td>
+    <td align="center"><b>Minimal</b><br/><img src="https://raw.githubusercontent.com/Rigel6306/react-design-cursor/main/docs/minimal.gif" width="400" alt="Minimal variant demo" /></td>
   </tr>
   <tr>
-    <td align="center"><b>Custom palette</b><br/><img src="./docs/custom.gif" width="400" alt="Custom palette demo" /></td>
-    <td align="center"><b>Mixed</b> (minimal cursor, gradient boxes)<br/><img src="./docs/mixed.gif" width="400" alt="Mixed effects demo" /></td>
+    <td align="center"><b>Custom palette</b><br/><img src="https://raw.githubusercontent.com/Rigel6306/react-design-cursor/main/docs/custom.gif" width="400" alt="Custom palette demo" /></td>
+    <td align="center"><b>Mixed</b> (minimal cursor, gradient boxes)<br/><img src="https://raw.githubusercontent.com/Rigel6306/react-design-cursor/main/docs/mixed.gif" width="400" alt="Mixed effects demo" /></td>
   </tr>
 </table>
 
@@ -187,7 +187,7 @@ Put these on elements inside the component:
 
 ### 1. Original flat look, in blue
 
-![Minimal demo](./docs/minimal.gif)
+![Minimal demo](https://raw.githubusercontent.com/Rigel6306/react-design-cursor/main/docs/minimal.gif)
 
 ```tsx
 import { DesignCursor } from "react-design-cursor";
@@ -209,7 +209,7 @@ export const Features = () => (
 
 ### 2. Gradient look (default)
 
-![Gradient demo](./docs/gradient.gif)
+![Gradient demo](https://raw.githubusercontent.com/Rigel6306/react-design-cursor/main/docs/gradient.gif)
 
 ```tsx
 <DesignCursor label="Lead Designer">
@@ -221,7 +221,7 @@ export const Features = () => (
 
 ### 3. Your own palette
 
-![Custom palette demo](./docs/custom.gif)
+![Custom palette demo](https://raw.githubusercontent.com/Rigel6306/react-design-cursor/main/docs/custom.gif)
 
 ```tsx
 <DesignCursor
@@ -237,7 +237,7 @@ export const Features = () => (
 
 A flat blue cursor with gradient boxes, a breathing aura, dust and an iris reveal.
 
-![Mixed demo](./docs/mixed.gif)
+![Mixed demo](https://raw.githubusercontent.com/Rigel6306/react-design-cursor/main/docs/mixed.gif)
 
 ```tsx
 <DesignCursor
