@@ -1,6 +1,6 @@
 {
   "name": "react-design-cursor",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "license": "MIT",
   "description": "A react animation wrapper that brings UI sections to life by simulating a designer biuilding and outlining the components in real-time",
   "author": "charitha/rigel6306",
@@ -24,7 +24,6 @@
   },
   "files": [
     "dist"
-   
   ],
   "scripts": {
     "prepack": "npm run build",
