@@ -41,8 +41,5 @@
     "typescript": "^6.0.3",
     "vite": "^8.3.6",
     "vite-plugin-dts": "^5.1.2"
-  },
-  "dependencies": {
-    "react-design-cursor": "^0.0.0-stage"
   }
 }
