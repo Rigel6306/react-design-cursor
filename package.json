@@ -41,5 +41,9 @@
     "typescript": "^6.0.3",
     "vite": "^8.3.6",
     "vite-plugin-dts": "^5.1.2"
-  }
+  },
+  "repository": {
+  "type": "git",
+  "url": "git+https://github.com/Rigel6306/react-design-cursor.git"
+}
 }
